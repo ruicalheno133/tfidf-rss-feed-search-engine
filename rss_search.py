@@ -5,6 +5,7 @@ import getopt
 import subprocess
 import itertools
 import re
+import math
 import pickle
 from nltk.stem import PorterStemmer
 from lxml import etree
@@ -63,6 +64,36 @@ def tfScore (wordList):
     return occur
 
 '''
+    Calculates Inverse Document Frequency (IDF) for each word
+    and updates the IDF denominator
+    For each word, IDF = log ((Total documents) / (Ocurrences))
+'''
+def idfScore (wordList):
+    totaldocs = len(corpus) + 1
+    words= list(Counter(wordList))
+    idfscore = {}
+    for word in words:
+        idfDenominators[word] = idfDenominators.get(word, 0) + 1
+        idfscore[word] = math.log(totaldocs/idfDenominators[word], 10)
+    return idfscore
+
+
+'''
+    Given the TF score and the IDF score, calculates de TF-IDF score,
+    stores the three(3) scores in a dictionary
+'''
+def tfidfScore (tfscore, idfscore):
+    tfidfscore = {}
+    for word in tfscore.keys():
+        newObj = {}
+        newObj['tfscore'] = tfscore[word]
+        newObj['idfscore'] = idfscore[word],
+        newObj['tfidfscore'] = tfscore[word] * idfscore[word]
+        tfidfscore[word] = newObj
+    return tfidfscore
+
+
+'''
     Parses an item tag from a xml RSS feed
     Gathers link, cleans content, gathers TF Score
 '''
@@ -74,28 +105,40 @@ def parseItem (item):
     link = item.xpath('./link')[0].text
 
     # Gathers html page
-    fullDocument = subprocess.check_output(['curl', 'https://www.bbc.com/news/health-48512923'])
+    fullDocument = subprocess.check_output(['curl', link])
     # Cleans document (returns list with body's words)
     wordList = cleanDocument(fullDocument)
-    # Calculate TF-IDF value (returns dictionary)
+    # Calculate TF-IDF score (returns dictionary)
     tfscore = tfScore(wordList)
+    idfscore = idfScore(wordList)
+    tfidfscore = tfidfScore(tfscore, idfscore)
 
-    return title, link, tfscore
+    return title, link, tfidfscore
 
 def incrementIdfDenominators (words):
-    for word in words:
-        idfDenominators[word] = idfDenominators.get(word, 0) + 1
+    return
 
+def addTFIDF (title, link, tfScore):
+    return 
 
+def addDoc(title,link, tfidfscore):
+    doc = {
+        'title': title,
+        'link': link, 
+        'tfidfscore' : tfidfscore
+    }
+    corpus.append(doc)
+    print('Added document to corpus:', title)
 
 def parseFeed (url):
     rss = subprocess.check_output(['curl', url])
     rssTree = etree.fromstring(rss)
     items= rssTree.xpath('//item')
     for item in items:
-        title, link, tfScore = parseItem (item)
-        incrementIdfDenominators(tfScore.keys())
-        # TODO: insert into database
+        title, link, tfidfscore = parseItem (item)
+        #TODO: updateTFIDF(tfScore)
+        addDoc(title,link, tfidfscore)
+
 
 # Load pickles 
 def loadPickles():
@@ -129,16 +172,40 @@ def dumpPickles ():
     idfPickle.close()
     corpusPickle.close()
 
+def searchDocument (keyword):
+    docList = []
+    for doc in corpus: 
+        if keyword in doc['tfidfscore'] :
+            obj = {
+                'title'     : doc['title'],
+                'link'      : doc['link'],
+                'tfidfscore': doc['tfidfscore'][keyword]
+            }
+            docList.append(obj)
+    return docList
+
+def prettyPrint (results):
+    i = 0
+    for r in results:
+        i = i + 1
+        print(str(i) + '. ========================')
+        print('Title:', r['title'])
+        print('Link:', r['link'])
+        print('TFIDF:', str(r['tfidfscore']['tfidfscore']))
+        print()
+
+
 # Setup
 
-# Load pickle files
+corpus = []
+idfDenominators = {}
 
 
 # Initializes stemmer
 porter = PorterStemmer()
 
 # Gather command line options
-opts, args = getopt.getopt(sys.argv[1:], 'lc')
+opts, args = getopt.getopt(sys.argv[1:], 'ls:r')
 opts = dict(opts)
 
 if '-l' in opts:    
@@ -146,11 +213,18 @@ if '-l' in opts:
     parseFeed(args[0])
     dumpPickles()
 
-if '-c' in opts: # Creates pickle files
+if '-r' in opts: # Resets pickle files
     idfPickle = open(f'./idfDenominators.pkl', 'wb+')
     corpusPickle = open(f'./corpus.pkl', 'wb+')
-    
 
+    pickle.dump({}, idfPickle)
+    pickle.dump([], corpusPickle)
 
+    idfPickle.close()
+    corpusPickle.close()
 
-
+if '-s' in opts: 
+    corpus, idfDenominators = loadPickles()
+    results = searchDocument(opts['-s'])
+    results.sort(reverse=True, key=(lambda x: x['tfidfscore']['tfidfscore']))
+    prettyPrint(results)
