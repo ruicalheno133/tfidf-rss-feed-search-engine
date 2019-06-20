@@ -43,10 +43,12 @@ def cleanDocument(doc):
     paragraphs = soup.find_all('p') 
     # split words 
     for p in paragraphs:
-        p = str(p)
+        print(p)
+        p = str(p).lower()
         p = re.sub(r'<p.*?>|</p>', '', p) # remove tags
-        p = re.split('\W+', p) # remove spaces
+        p = re.split(r'\W+', p) # remove spaces
         words.append(p)
+    
     words = list(itertools.chain.from_iterable(words))
     words = removeBlanks(words) # remove espaços em branco da lista
     # words = stemWords(words) # faz stemming
@@ -87,7 +89,7 @@ def tfidfScore (tfscore, idfscore):
     for word in tfscore.keys():
         newObj = {}
         newObj['tfscore'] = tfscore[word]
-        newObj['idfscore'] = idfscore[word],
+        newObj['idfscore'] = idfscore[word]
         newObj['tfidfscore'] = tfscore[word] * idfscore[word]
         tfidfscore[word] = newObj
     return tfidfscore
@@ -105,7 +107,7 @@ def parseItem (item):
     link = item.xpath('./link')[0].text
 
     # Gathers html page
-    fullDocument = subprocess.check_output(['curl', link])
+    fullDocument = subprocess.check_output(['curl','-L', link])
     # Cleans document (returns list with body's words)
     wordList = cleanDocument(fullDocument)
     # Calculate TF-IDF score (returns dictionary)
@@ -127,6 +129,8 @@ def addDoc(title,link, tfidfscore):
         'link': link, 
         'tfidfscore' : tfidfscore
     }
+    if (doc['title'] == "'Her ancestors enslaved mine. Now we're friends'"):
+        print(doc['tfidfscore'])
     corpus.append(doc)
     print('Added document to corpus:', title)
 
@@ -175,6 +179,7 @@ def dumpPickles ():
 def searchDocument (keyword):
     docList = []
     for doc in corpus: 
+
         if keyword in doc['tfidfscore'] :
             obj = {
                 'title'     : doc['title'],
@@ -205,7 +210,7 @@ idfDenominators = {}
 porter = PorterStemmer()
 
 # Gather command line options
-opts, args = getopt.getopt(sys.argv[1:], 'ls:r')
+opts, args = getopt.getopt(sys.argv[1:], 'ls:rc')
 opts = dict(opts)
 
 if '-l' in opts:    
@@ -228,3 +233,7 @@ if '-s' in opts:
     results = searchDocument(opts['-s'])
     results.sort(reverse=True, key=(lambda x: x['tfidfscore']['tfidfscore']))
     prettyPrint(results)
+
+if '-c' in opts:
+    corpus, idfDenominators = loadPickles() 
+    print(list(filter(lambda x: x['title'] == "'Her ancestors enslaved mine. Now we're friends'", corpus)))
