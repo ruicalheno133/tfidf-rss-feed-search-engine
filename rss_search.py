@@ -2,6 +2,9 @@
 
 '''
     RSS FEED TF-IDF BASED SEARCH ENGINE 
+
+    Script for loading a RSS FEED (BBC News) into a corpus, 
+    and querying it using TF-IDF method to rank the query results.
 '''
 
 import sys 
@@ -25,7 +28,7 @@ def removeBlanks (l):
     return l
 
 '''
-    Word stemming based on Porter Stemmer
+    Word stemming using Porter Stemmer
 '''
 def stemWords (words):
     stem = []
@@ -90,9 +93,6 @@ def tfidfScore (tfscore, idfscore):
     Gathers link, cleans content, gathers TF Score
 '''
 def parseItem (item):
-    # TODO: clean titles
-    # TODO: insert in database
-    # TODO: parse item and calculate TF-IDF
     title = item.xpath('./title')[0].text
     link = item.xpath('./link')[0].text
 
@@ -132,7 +132,6 @@ def parseFeed (url):
     items= rssTree.xpath('//item')
     for item in items:
         title, link, tfscore = parseItem (item)
-        #TODO: updateTFIDF(tfScore)
         addDoc(title,link, tfscore)
 
 
@@ -140,7 +139,7 @@ def parseFeed (url):
     Loads pickles
 '''
 def loadPickles():
-    corpusPickle = open(f'./corpus.pkl', 'rb+')
+    corpusPickle = open(f'./pickles/corpus.pkl', 'rb+')
     # load Corpus information
     try:
         corpus = pickle.load(corpusPickle)
@@ -155,7 +154,7 @@ def loadPickles():
     Dumps pickles
 '''
 def dumpPickles ():
-    corpusPickle = open(f'./corpus.pkl', 'wb+')
+    corpusPickle = open(f'./pickles/corpus.pkl', 'wb+')
 
     pickle.dump(corpus, corpusPickle)
 
@@ -240,7 +239,7 @@ if '-l' in opts:
 '''
 if '-r' in opts: # Resets pickle files
     print("Reseting pickle files")
-    corpusPickle = open(f'./corpus.pkl', 'wb+')
+    corpusPickle = open(f'./pickles/corpus.pkl', 'wb+')
     pickle.dump({}, corpusPickle)
     corpusPickle.close()
     print("Done.")
