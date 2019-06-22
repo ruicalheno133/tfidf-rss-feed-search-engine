@@ -1,5 +1,9 @@
 #!/usr/local/bin/python3
 
+'''
+    RSS FEED TF-IDF BASED SEARCH ENGINE 
+'''
+
 import sys 
 import getopt
 import subprocess
@@ -34,7 +38,6 @@ def stemWords (words):
     Cleans an html document
     Filter by paragraph, removes tags,
     splits by non alpha-numeric & stems the words
-
 '''
 def cleanDocument(doc):
     words = []
@@ -44,7 +47,7 @@ def cleanDocument(doc):
     # split words 
     for p in paragraphs:
         print(p)
-        p = str(p).lower()
+        p = str(p).lower() # lowers text
         p = re.sub(r'<p.*?>|</p>', '', p) # remove tags
         p = re.split(r'\W+', p) # remove spaces
         words.append(p)
@@ -66,33 +69,20 @@ def tfScore (wordList):
     return occur
 
 '''
-    Calculates Inverse Document Frequency (IDF) for each word
-    and updates the IDF denominator
-    For each word, IDF = log ((Total documents) / (Ocurrences))
+    Given a word calculates its Inverse Document Frequency (IDF)
+    IDF = log ((Total documents) / (Ocurrences))
 '''
-def idfScore (wordList):
-    totaldocs = len(corpus) + 1
-    words= list(Counter(wordList))
-    idfscore = {}
-    for word in words:
-        idfDenominators[word] = idfDenominators.get(word, 0) + 1
-        idfscore[word] = math.log(totaldocs/idfDenominators[word], 10)
-    return idfscore
+def idfScore (keyword):
+        totalDocs = getInfo(corpus)[1]
+        wordOccur = len(corpus[keyword])
+        return math.log(totalDocs/wordOccur,10) 
 
 
 '''
-    Given the TF score and the IDF score, calculates de TF-IDF score,
-    stores the three(3) scores in a dictionary
+    Given the TF score and the IDF score, calculates de TF-IDF score
 '''
 def tfidfScore (tfscore, idfscore):
-    tfidfscore = {}
-    for word in tfscore.keys():
-        newObj = {}
-        newObj['tfscore'] = tfscore[word]
-        newObj['idfscore'] = idfscore[word]
-        newObj['tfidfscore'] = tfscore[word] * idfscore[word]
-        tfidfscore[word] = newObj
-    return tfidfscore
+    return tfscore * idfscore
 
 
 '''
@@ -110,85 +100,87 @@ def parseItem (item):
     fullDocument = subprocess.check_output(['curl','-L', link])
     # Cleans document (returns list with body's words)
     wordList = cleanDocument(fullDocument)
-    # Calculate TF-IDF score (returns dictionary)
+    
+    # Calculate TF Score (returns dictionary)
     tfscore = tfScore(wordList)
-    idfscore = idfScore(wordList)
-    tfidfscore = tfidfScore(tfscore, idfscore)
 
-    return title, link, tfidfscore
+    return title, link, tfscore
 
-def incrementIdfDenominators (words):
-    return
-
-def addTFIDF (title, link, tfScore):
-    return 
-
-def addDoc(title,link, tfidfscore):
-    doc = {
-        'title': title,
-        'link': link, 
-        'tfidfscore' : tfidfscore
-    }
-    if (doc['title'] == "'Her ancestors enslaved mine. Now we're friends'"):
-        print(doc['tfidfscore'])
-    corpus.append(doc)
+'''
+    Adds a document to the corpus
+'''
+def addDoc(title,link, tfscore):
+    for word, tf in tfscore.items():
+        doc = {
+            'title': title,
+            'link': link, 
+            'tfscore' : tf
+        }
+        if word in corpus:
+            corpus[word].append(doc)
+        else:
+            corpus[word] = [doc]
     print('Added document to corpus:', title)
 
+'''
+    Parses a RSS feed, adding each document to the corpus 
+    For each document stores its title, link and tf score
+'''
 def parseFeed (url):
     rss = subprocess.check_output(['curl', url])
     rssTree = etree.fromstring(rss)
     items= rssTree.xpath('//item')
     for item in items:
-        title, link, tfidfscore = parseItem (item)
+        title, link, tfscore = parseItem (item)
         #TODO: updateTFIDF(tfScore)
-        addDoc(title,link, tfidfscore)
+        addDoc(title,link, tfscore)
 
 
-# Load pickles 
+'''
+    Loads pickles
+'''
 def loadPickles():
-    idfPickle = open(f'./idfDenominators.pkl', 'rb+')
     corpusPickle = open(f'./corpus.pkl', 'rb+')
-    # load IDF denominators
-    try:
-        idfDenominators = pickle.load(idfPickle)
-    except EOFError:
-        idfDenominators = {}
-
     # load Corpus information
     try:
         corpus = pickle.load(corpusPickle)
     except EOFError:
         corpus = []
 
-    idfPickle.close()
     corpusPickle.close()
 
-    return corpus, idfDenominators
+    return corpus
 
-# Dump pickles
+'''
+    Dumps pickles
+'''
 def dumpPickles ():
-    idfPickle = open(f'./idfDenominators.pkl', 'wb+')
     corpusPickle = open(f'./corpus.pkl', 'wb+')
 
-    pickle.dump(idfDenominators, idfPickle)
     pickle.dump(corpus, corpusPickle)
 
-    idfPickle.close()
     corpusPickle.close()
 
+'''
+    Given a keyword, searches for it in the corpus
+    Returns the list of documents that obbey this condition
+'''
 def searchDocument (keyword):
     docList = []
-    for doc in corpus: 
-
-        if keyword in doc['tfidfscore'] :
+    if keyword in corpus:
+        idfscore = idfScore(keyword)
+        for doc in corpus[keyword]:
             obj = {
                 'title'     : doc['title'],
                 'link'      : doc['link'],
-                'tfidfscore': doc['tfidfscore'][keyword]
+                'tfidf'     : tfidfScore(doc['tfscore'], idfscore)
             }
             docList.append(obj)
     return docList
 
+'''
+    Pretty prints the results given
+'''
 def prettyPrint (results):
     i = 0
     for r in results:
@@ -196,44 +188,80 @@ def prettyPrint (results):
         print(str(i) + '. ========================')
         print('Title:', r['title'])
         print('Link:', r['link'])
-        print('TFIDF:', str(r['tfidfscore']['tfidfscore']))
+        print('TFIDF:', str(r['tfidf']))
         print()
 
+'''
+    Gather info from corpus 
+    > Number of documents
+    > Number of words 
+'''
+def getInfo (corpus):
+    nwords = 0
+    ndocs = 0
+    docList = {}
+    for word, docs in corpus.items():
+        nwords += 1
+        for doc in docs:
+            docList[doc['title']] = 1
+    ndocs = len(docList.keys())
+    return ndocs, nwords
+    
 
-# Setup
+'''
+    Setup
+'''
 
+''' Initializes corpus '''
 corpus = []
-idfDenominators = {}
 
-
-# Initializes stemmer
+''' Initializes Porter stemmer'''
 porter = PorterStemmer()
 
-# Gather command line options
-opts, args = getopt.getopt(sys.argv[1:], 'ls:rc')
+''' Gather command line information'''
+opts, args = getopt.getopt(sys.argv[1:], 'ls:rci')
 opts = dict(opts)
 
-if '-l' in opts:    
-    corpus, idfDenominators = loadPickles()
+'''
+    Loads a rss feed into the corpus
+'''
+if '-l' in opts:
+    print('Loading corpus...') 
+    corpus = loadPickles()
+    print(corpus)
+    print('Corpus loaded.')
     parseFeed(args[0])
+    print('Parsing feed...')
     dumpPickles()
+    print('Done.')
 
+'''
+    Resets/Initializes corpus 
+'''
 if '-r' in opts: # Resets pickle files
-    idfPickle = open(f'./idfDenominators.pkl', 'wb+')
+    print("Reseting pickle files")
     corpusPickle = open(f'./corpus.pkl', 'wb+')
-
-    pickle.dump({}, idfPickle)
-    pickle.dump([], corpusPickle)
-
-    idfPickle.close()
+    pickle.dump({}, corpusPickle)
     corpusPickle.close()
+    print("Done.")
 
+'''
+    Runs a "One word" search query 
+    Results are based on the current tfidf value
+'''
 if '-s' in opts: 
-    corpus, idfDenominators = loadPickles()
-    results = searchDocument(opts['-s'])
-    results.sort(reverse=True, key=(lambda x: x['tfidfscore']['tfidfscore']))
+    corpus = loadPickles()
+    results = searchDocument(opts['-s'].lower())
+    results.sort(reverse=True, key=(lambda x: x['tfidf']))
     prettyPrint(results)
 
-if '-c' in opts:
-    corpus, idfDenominators = loadPickles() 
-    print(list(filter(lambda x: x['title'] == "'Her ancestors enslaved mine. Now we're friends'", corpus)))
+'''
+    Displays information about the current Corpus 
+    Information contains:
+        - Number of documents,
+        - Number of words
+'''
+if '-i' in opts:
+    corpus = loadPickles() 
+    info = getInfo(corpus)
+    print(info)
