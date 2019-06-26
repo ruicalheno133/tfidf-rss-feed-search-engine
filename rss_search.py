@@ -66,7 +66,9 @@ def cleanDocument(doc):
     htmlparser = etree.HTMLParser()
     html = etree.fromstring(doc,htmlparser)
     # get article content
-    body = html.xpath(CONTENT_GETTER)
+    body = html.xpath(CURRENT_GETTER)
+    print(CURRENT_GETTER)
+    print(body)
     # split words 
     for p in body:
         p = p.text
@@ -145,11 +147,14 @@ def addDoc(title,link, tfscore):
     For each document stores its title, link and tf score
 '''
 def parseFeed (sources):
+    global CURRENT_GETTER
+
     for source in sources:
         last_modified = None
         print('Loading news from:', source)
 
         feed = feedparser.parse(source, modified=last_modified)
+        CURRENT_GETTER = CONTENT_GETTERS[source]
         try:
             last_modified = feed.modified 
             print('Source last modified in', last_modified)
@@ -157,8 +162,11 @@ def parseFeed (sources):
             print('Source doesn\'t allow Conditional Get Request')
 
         for doc in feed.entries:
-            tfscore = parseItem (doc.link)
-            addDoc(doc.title, doc.link, tfscore)
+            try:
+                tfscore = parseItem (doc.link)
+                addDoc(doc.title, doc.link, tfscore)
+            except subprocess.CalledProcessError:
+                print('Unable to fetch:', doc.title)
 
 
 '''
@@ -252,7 +260,8 @@ f = open('config.json', 'r')
 config = json.load(f)
 REFRESH_INTERVAL = config['refresh_interval']
 SOURCES          = config['sources']
-CONTENT_GETTER   = config['content_getter']
+CONTENT_GETTERS  = config['content_getters']
+CURRENT_GETTER   = None
 
 ''' Initializes corpus '''
 corpus = []

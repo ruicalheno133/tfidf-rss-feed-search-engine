@@ -1,8 +1,11 @@
 {
     "sources": [
-        "http://feeds.bbci.co.uk/news/world/rss.xml",
-        "http://rss.cnn.com/rss/edition_world.rss"
+        "http://rss.cnn.com/rss/edition_world.rss",
+        "http://feeds.bbci.co.uk/news/world/rss.xml"
     ], 
     "refresh_interval": 1800, 
-    "content_getter": "//div[@property='articleBody']//p"
+    "content_getters": {
+        "http://feeds.bbci.co.uk/news/world/rss.xml" : "//div[@property='articleBody']//p",
+        "http://rss.cnn.com/rss/edition_world.rss" : "//div[contains(@class, 'zn-body__paragraph')]"
+    }
 }
