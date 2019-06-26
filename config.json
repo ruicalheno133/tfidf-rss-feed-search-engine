@@ -1,0 +1,8 @@
+{
+    "sources": [
+        "http://feeds.bbci.co.uk/news/world/rss.xml",
+        "http://rss.cnn.com/rss/edition_world.rss"
+    ], 
+    "refresh_interval": 1800, 
+    "content_getter": "//div[@property='articleBody']//p"
+}

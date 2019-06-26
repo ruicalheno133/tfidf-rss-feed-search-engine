@@ -15,6 +15,8 @@ import re
 import math
 import pickle
 import feedparser
+import json
+import time
 from nltk.corpus import stopwords
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
@@ -22,6 +24,7 @@ from nltk.stem import PorterStemmer
 from lxml import etree
 from bs4 import BeautifulSoup
 from collections import Counter
+from apscheduler.schedulers.background import BackgroundScheduler
 
 '''
     List of English StopWords
@@ -60,11 +63,13 @@ def removeStopWords (wordList):
 '''
 def cleanDocument(doc):
     words = []
-    soup = BeautifulSoup(doc, 'html.parser')
-    # get paragraphs
-    paragraphs = soup.find_all('p') 
+    htmlparser = etree.HTMLParser()
+    html = etree.fromstring(doc,htmlparser)
+    # get article content
+    body = html.xpath(CONTENT_GETTER)
     # split words 
-    for p in paragraphs:
+    for p in body:
+        p = p.text
         p = str(p).lower() # lowers text
         p = re.sub(r'<p.*?>|</p>', '', p) # remove tags
         p = re.split(r'\W+', p) # remove spaces
@@ -83,7 +88,6 @@ def cleanDocument(doc):
 def tfScore (wordList):
     total = len(wordList)
     occur = Counter(wordList) 
-    print(occur)
     for key, value in occur.items():
         occur[key] = value / total
     return occur
@@ -140,12 +144,21 @@ def addDoc(title,link, tfscore):
     Parses a RSS feed, adding each document to the corpus 
     For each document stores its title, link and tf score
 '''
-def parseFeed (url):
-    feed = feedparser.parse(url)
-    for doc in feed.entries:
-        print(doc.link)
-        tfscore = parseItem (doc.link)
-        addDoc(doc.title, doc.link, tfscore)
+def parseFeed (sources):
+    for source in sources:
+        last_modified = None
+        print('Loading news from:', source)
+
+        feed = feedparser.parse(source, modified=last_modified)
+        try:
+            last_modified = feed.modified 
+            print('Source last modified in', last_modified)
+        except:
+            print('Source doesn\'t allow Conditional Get Request')
+
+        for doc in feed.entries:
+            tfscore = parseItem (doc.link)
+            addDoc(doc.title, doc.link, tfscore)
 
 
 '''
@@ -194,6 +207,12 @@ def searchDocument (keyword):
                 docList.append(obj)
     return docList
 
+def loadFeed():
+    print('Parsing feed...')
+    parseFeed(SOURCES)
+    dumpPickles()
+    print('Done.')
+
 '''
     Pretty prints the results given
 '''
@@ -228,14 +247,24 @@ def getInfo (corpus):
     Setup
 '''
 
+''' Gather configs '''
+f = open('config.json', 'r')
+config = json.load(f)
+REFRESH_INTERVAL = config['refresh_interval']
+SOURCES          = config['sources']
+CONTENT_GETTER   = config['content_getter']
+
 ''' Initializes corpus '''
 corpus = []
+
+''' Initialize Last Modified Dates '''
+last_modified_dates = {}
 
 ''' Initializes Porter stemmer'''
 porter = PorterStemmer()
 
 ''' Gather command line information'''
-opts, args = getopt.getopt(sys.argv[1:], 'ls:rcip:')
+opts, args = getopt.getopt(sys.argv[1:], 'ls:rcip:a')
 opts = dict(opts)
 
 '''
@@ -245,10 +274,26 @@ if '-l' in opts:
     print('Loading corpus...') 
     corpus = loadPickles()
     print('Corpus loaded.')
-    parseFeed(args[0])
-    print('Parsing feed...')
-    dumpPickles()
-    print('Done.')
+    loadFeed()
+
+'''
+    Loads a rss feed into the corpus PERIODICALLY
+'''
+if '-a' in opts:
+    print('Loading corpus...')
+    corpus = loadPickles()
+    print('Corpus loaded.')
+
+    ''' Loads feed first time '''
+    loadFeed()
+
+    scheduler = BackgroundScheduler()
+    scheduler.start()
+    scheduler.add_job(loadFeed, 'interval', seconds = REFRESH_INTERVAL)
+
+    ''' Main loop '''
+    while True:
+        time.sleep(1)
 
 '''
     Resets/Initializes corpus 
