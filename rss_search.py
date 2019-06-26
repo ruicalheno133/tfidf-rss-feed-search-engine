@@ -143,30 +143,54 @@ def addDoc(title,link, tfscore):
     print('Added document to corpus:', title)
 
 '''
-    Parses a RSS feed, adding each document to the corpus 
+    Parses multiple RSS feed, adding each document to the corpus 
     For each document stores its title, link and tf score
+
+    Takes into consideration the publish date of the document,
+    only adding if it's indeed a newly published document
 '''
 def parseFeed (sources):
     global CURRENT_GETTER
 
+    ''' for each source '''
     for source in sources:
-        last_modified = None
-        print('Loading news from:', source)
+        ''' gathers publish date from newest document'''
+        last_modified = last_modified_dates.get(source, None) 
+        ''' updated publish date '''
+        updated_modified = last_modified
 
-        feed = feedparser.parse(source, modified=last_modified)
+        print('Loading news from:', source)
+        ''' Parses feed '''
+        feed = feedparser.parse(source)
+
+        ''' Gather XPATH for current source '''
         CURRENT_GETTER = CONTENT_GETTERS[source]
+
         try:
-            last_modified = feed.modified 
             print('Source last modified in', last_modified)
         except:
-            print('Source doesn\'t allow Conditional Get Request')
+            print('Source doesn\'t allow Conditional Get Request') 
 
+        ''' for each document in the feed '''
         for doc in feed.entries:
             try:
-                tfscore = parseItem (doc.link)
-                addDoc(doc.title, doc.link, tfscore)
+                ''' if Document is new '''
+                if last_modified == None or doc.published > last_modified:
+                        ''' Parse item '''
+                        tfscore = parseItem (doc.link)
+                        addDoc(doc.title, doc.link, tfscore)
+
+                        ''' Update modified '''
+                        if(updated_modified == None or doc.published > updated_modified):
+                            updated_modified = doc.published
+                else:
+                    print('Already fetched:', doc.title)
+            except AttributeError:
+                print('Unable to fetch:', doc.title)
             except subprocess.CalledProcessError:
                 print('Unable to fetch:', doc.title)
+
+        last_modified_dates[source] = updated_modified
 
 
 '''
@@ -174,25 +198,36 @@ def parseFeed (sources):
 '''
 def loadPickles():
     corpusPickle = open(f'./pickles/corpus.pkl', 'rb+')
+    lastmodifiedPickle = open(f'./pickles/lastmodified.pkl', 'rb+')
     # load Corpus information
     try:
         corpus = pickle.load(corpusPickle)
     except EOFError:
         corpus = []
 
-    corpusPickle.close()
+    # load Last modified dates information 
+    try:
+        last_modified_dates = pickle.load(lastmodifiedPickle)
+    except EOFError:
+        last_modified_dates= []
 
-    return corpus
+    corpusPickle.close()
+    lastmodifiedPickle.close()
+
+    return corpus, last_modified_dates
 
 '''
     Dumps pickles
 '''
 def dumpPickles ():
     corpusPickle = open(f'./pickles/corpus.pkl', 'wb+')
+    lastmodifiedPickle = open(f'./pickles/lastmodified.pkl', 'wb+')
 
     pickle.dump(corpus, corpusPickle)
+    pickle.dump(last_modified_dates, lastmodifiedPickle)
 
     corpusPickle.close()
+    lastmodifiedPickle.close()
 
 '''
     Given a keyword, searches for it in the corpus
@@ -266,6 +301,9 @@ CURRENT_GETTER   = None
 ''' Initializes corpus '''
 corpus = []
 
+''' Initializes last modified dates '''
+last_modified_dates = {}
+
 ''' Initialize Last Modified Dates '''
 last_modified_dates = {}
 
@@ -281,7 +319,7 @@ opts = dict(opts)
 '''
 if '-l' in opts:
     print('Loading corpus...') 
-    corpus = loadPickles()
+    corpus, last_modified_dates = loadPickles()
     print('Corpus loaded.')
     loadFeed()
 
@@ -290,7 +328,7 @@ if '-l' in opts:
 '''
 if '-a' in opts:
     print('Loading corpus...')
-    corpus = loadPickles()
+    corpus, last_modified_dates = loadPickles()
     print('Corpus loaded.')
 
     ''' Loads feed first time '''
@@ -310,8 +348,13 @@ if '-a' in opts:
 if '-r' in opts: # Resets pickle files
     print("Reseting pickle files")
     corpusPickle = open(f'./pickles/corpus.pkl', 'wb+')
+    lastmodifiedPickle = open(f'./pickles/lastmodified.pkl', 'wb+')
+
     pickle.dump({}, corpusPickle)
+    pickle.dump({}, lastmodifiedPickle)
+
     corpusPickle.close()
+    lastmodifiedPickle.close()
     print("Done.")
 
 '''
@@ -319,7 +362,7 @@ if '-r' in opts: # Resets pickle files
     Results are based on the current tfidf value
 '''
 if '-s' in opts: 
-    corpus = loadPickles()
+    corpus, last_modified_dates = loadPickles()
     results = searchDocument(opts['-s'].lower())
     results.sort(reverse=True, key=(lambda x: x['tfidf']))
     prettyPrint(results)
@@ -331,8 +374,9 @@ if '-s' in opts:
         - Number of words
 '''
 if '-i' in opts:
-    corpus = loadPickles() 
+    corpus, last_modified_dates= loadPickles() 
     info = getInfo(corpus)
+    print(last_modified_dates)
     print(info)
 
 if '-p' in opts:
