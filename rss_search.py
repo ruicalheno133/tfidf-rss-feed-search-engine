@@ -376,8 +376,12 @@ if '-s' in opts:
 if '-i' in opts:
     corpus, last_modified_dates= loadPickles() 
     info = getInfo(corpus)
-    print(last_modified_dates)
-    print(info)
+    print('Last modified dates:')
+    for source, date in last_modified_dates.items():
+        print('Source', source, '\t-', date)
+    print()
+    print('Total Documents in corpus:', info[0])
+    print('Total words:', info[1])
 
 if '-p' in opts:
     corpus = loadPickles() 
