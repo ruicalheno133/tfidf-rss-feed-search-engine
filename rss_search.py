@@ -17,6 +17,7 @@ import pickle
 import feedparser
 import json
 import time
+import datetime 
 from nltk.corpus import stopwords
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
@@ -67,13 +68,12 @@ def cleanDocument(doc):
     html = etree.fromstring(doc,htmlparser)
     # get article content
     body = html.xpath(CURRENT_GETTER)
-    print(CURRENT_GETTER)
-    print(body)
+
     # split words 
     for p in body:
         p = p.text
         p = str(p).lower() # lowers text
-        p = re.sub(r'<p.*?>|</p>', '', p) # remove tags
+        p = re.sub(r'<.*?>|</.*?>', '', p) # remove tags
         p = re.split(r'\W+', p) # remove spaces
         words.append(p)
     
@@ -137,7 +137,8 @@ def addDoc(title,link, tfscore):
             'tfscore' : tf
         }
         if word in corpus:
-            corpus[word].append(doc)
+            if not list(filter(lambda x: x.title == doc.title, corpus[word])):
+                corpus[word].append(doc)
         else:
             corpus[word] = [doc]
     print('Added document to corpus:', title)
@@ -167,7 +168,7 @@ def parseFeed (sources):
         CURRENT_GETTER = CONTENT_GETTERS[source]
 
         try:
-            print('Source last modified in', last_modified)
+            print('Source last modified in', time.strftime('%Y-%m-%d at %H:%M:%S', last_modified))
         except:
             print('Source doesn\'t allow Conditional Get Request') 
 
@@ -175,20 +176,20 @@ def parseFeed (sources):
         for doc in feed.entries:
             try:
                 ''' if Document is new '''
-                if last_modified == None or doc.published > last_modified:
-                        ''' Parse item '''
-                        tfscore = parseItem (doc.link)
-                        addDoc(doc.title, doc.link, tfscore)
+                if last_modified == None or doc.published_parsed > last_modified:
+                    ''' Parse item '''
+                    tfscore = parseItem (doc.link)
+                    addDoc(doc.title, doc.link, tfscore)
 
-                        ''' Update modified '''
-                        if(updated_modified == None or doc.published > updated_modified):
-                            updated_modified = doc.published
+                    ''' Update modified '''
+                    if(updated_modified == None or doc.published_parsed > updated_modified):
+                        updated_modified = doc.published_parsed
                 else:
                     print('Already fetched:', doc.title)
             except AttributeError:
-                print('Unable to fetch:', doc.title)
+                print('WARNING: Unable to fetch', doc.title)
             except subprocess.CalledProcessError:
-                print('Unable to fetch:', doc.title)
+                print('ERROR: Unable to fetch', doc.title)
 
         last_modified_dates[source] = updated_modified
 
@@ -293,7 +294,7 @@ def getInfo (corpus):
 ''' Gather configs '''
 f = open('config.json', 'r')
 config = json.load(f)
-REFRESH_INTERVAL = config['refresh_interval']
+REFRESH_INTERVAL = config['refresh_interval'] * 60
 SOURCES          = config['sources']
 CONTENT_GETTERS  = config['content_getters']
 CURRENT_GETTER   = None
@@ -384,5 +385,5 @@ if '-i' in opts:
     print('Total words:', info[1])
 
 if '-p' in opts:
-    corpus = loadPickles() 
-    print(corpus[opts['-p']])
+    corpus, last_modified_dates = loadPickles() 
+    print(corpus[opts['-p'].lower()])
