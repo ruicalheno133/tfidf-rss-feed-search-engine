@@ -137,7 +137,7 @@ def addDoc(title,link, tfscore):
             'tfscore' : tf
         }
         if word in corpus:
-            if not list(filter(lambda x: x.title == doc.title, corpus[word])):
+            if not list(filter(lambda x: x['title'] == title, corpus[word])):
                 corpus[word].append(doc)
         else:
             corpus[word] = [doc]
@@ -186,7 +186,8 @@ def parseFeed (sources):
                         updated_modified = doc.published_parsed
                 else:
                     print('Already fetched:', doc.title)
-            except AttributeError:
+            except AttributeError as e:
+                print(e)
                 print('WARNING: Unable to fetch', doc.title)
             except subprocess.CalledProcessError:
                 print('ERROR: Unable to fetch', doc.title)
